@@ -89,3 +89,32 @@ python3 -m venv .venv
 source .venv/bin/activate   # macOS/Linux
 # .venv\Scripts\activate    # Windows
 
+pip install -r requirements.txt
+
+streamlit run app/app.py
+
+python -m utils.explain_shap
+
+python -m utils.drift_report
+
+[theme]
+base = "light"
+
+streamlit>=1.28
+pandas
+numpy
+scikit-learn
+plotly>=5,<6
+jinja2>=3.1,<4
+evidently>=0.6.0
+joblib
+shap
+matplotlib
+
+
+---
+
+You can **copy everything above** into your GitHub `README.md` file.  
+
+Do you also want me to shorten this into a **LinkedIn-ready project showcase post** (2–3 lines + your app link) so you can share it easily?
+
