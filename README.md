@@ -55,3 +55,37 @@ The project integrates **prediction, explainability (SHAP), and monitoring (Evid
 
 ---
 
+## 🌐 Live Demo
+
+👉 [**Click here to try the app**](https://doordash-eta-prediction-hox7vaedsb6tumugrgx38e.streamlit.app)
+
+---
+
+## 🧱 Tech Stack
+
+- **Backend/ML**: Python, scikit-learn, joblib  
+- **Visualization**: Plotly, Matplotlib  
+- **Explainability**: SHAP  
+- **Monitoring**: Evidently  
+- **Frontend/UI**: Streamlit  
+- **Hosting**: Streamlit Community Cloud  
+
+---
+
+## 📂 Project Structure
+
+---
+
+## ⚡ Getting Started
+
+### 🔹 1. Clone the Repository
+
+```bash
+git clone https://github.com/<your-username>/DoorDash-ETA-Prediction.git
+cd DoorDash-ETA-Prediction
+
+
+python3 -m venv .venv
+source .venv/bin/activate   # macOS/Linux
+# .venv\Scripts\activate    # Windows
+
