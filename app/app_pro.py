@@ -1,32 +1,46 @@
-# app/app_pro.py — DoorDash ETA Prediction Dashboard (single page)
-import sys
+# app/app.py — DoorDash ETA Prediction Dashboard (light theme, self-healing)
 from pathlib import Path
 from io import BytesIO
-
-import streamlit as st
-import pandas as pd
-import numpy as np
+import sys
 import json
 import joblib
+import numpy as np
+import pandas as pd
 import plotly.express as px
+import streamlit as st
 
-# ── Make project root importable so `utils/` works when launched via Streamlit
+# ───────────────────────────────────────────────────────────────────────────────
+# Basic setup
+# ───────────────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# ── Page config + theme
 st.set_page_config(page_title="DoorDash ETA Prediction Dashboard", page_icon="🛵", layout="wide")
 
-# ── Paths & artifact loaders
 ART = PROJECT_ROOT / "artifacts_aug"
 DATA = PROJECT_ROOT / "data" / "processed"
 REPORTS = PROJECT_ROOT / "reports"
 
 def load_logo_bytes():
-    logo_path = PROJECT_ROOT / "app" / "assets" / "logo.png"
-    return logo_path.read_bytes() if logo_path.exists() else None
+    p = PROJECT_ROOT / "app" / "assets" / "logo.png"
+    return p.read_bytes() if p.exists() else None
 
+# ───────────────────────────────────────────────────────────────────────────────
+# Bootstrap: train a compact model if artifacts are missing (cloud-safe)
+# ───────────────────────────────────────────────────────────────────────────────
+bootstrap_msg = ""
+try:
+    from utils.bootstrap import ensure_small_model
+    info = ensure_small_model(max_rows=8000)  # trains if missing; no-op if present
+    if info.get("created"):
+        bootstrap_msg = f"Auto-trained compact model (n={info['n']}, MAE={info['mae']:.0f}s)."
+except Exception as e:
+    bootstrap_msg = f"Bootstrap skipped: {e}"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Load artifacts
+# ───────────────────────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_artifacts():
     feature_cols = []
@@ -45,7 +59,18 @@ def load_artifacts():
 
 feature_cols, rf_model, xgb_model, meta, q90 = load_artifacts()
 
-# ── Sidebar: title, logo, snapshot
+# One retry if still empty (first-run race)
+if rf_model is None and xgb_model is None:
+    try:
+        from utils.bootstrap import ensure_small_model
+        ensure_small_model(max_rows=5000)
+        feature_cols, rf_model, xgb_model, meta, q90 = load_artifacts.__wrapped__()  # bypass cache
+    except Exception:
+        pass
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Sidebar: branding + snapshot + status
+# ───────────────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### 🛵 ETA Dashboard")
     lb = load_logo_bytes()
@@ -53,37 +78,47 @@ with st.sidebar:
         try:
             st.image(BytesIO(lb), use_container_width=True)
         except TypeError:
-            st.image(BytesIO(lb), use_column_width=True)  # fallback for older Streamlit
-    else:
-        st.markdown("**📦 DoorDash ETA**")
+            st.image(BytesIO(lb), use_column_width=True)
     st.caption("Predict delivery ETAs with real-world signals (weather, traffic, supply/demand).")
 
 with st.sidebar:
     st.divider()
     st.markdown("**Model Snapshot**")
     mdl = xgb_model or rf_model
-    st.write(f"Type: **{'XGBoost' if xgb_model else 'RandomForest'}**" if mdl else "No model loaded")
-    if meta:
-        if isinstance(meta.get("mae_sec", None), (float, int)):
-            st.write(f"Trained (UTC): `{meta.get('train_datetime_utc','?')}`")
-            st.write(f"MAE: **{meta.get('mae_sec'):.1f} s**  |  RMSE: **{meta.get('rmse_sec'):.1f} s**")
+    st.write(f"Type: **{'XGBoost' if xgb_model else ('RandomForest' if rf_model else 'None')}**")
+    if meta and isinstance(meta.get("mae_sec"), (int, float)):
+        st.write(f"Trained (UTC): `{meta.get('train_datetime_utc','?')}`")
+        st.write(f"MAE: **{meta.get('mae_sec'):.1f} s**  |  RMSE: **{meta.get('rmse_sec'):.1f} s**")
         st.write(f"Features: **{meta.get('n_features','?')}**  |  Rows: **{meta.get('n_samples','?')}**")
     if mdl and feature_cols and hasattr(mdl, "feature_importances_"):
         imp = np.asarray(mdl.feature_importances_)
-        top = imp.argsort()[-10:][::-1]
-        st.write("Top features:")
+        top = imp.argsort()[-8:][::-1]
         for i in top:
             st.write(f"• {feature_cols[i]} — {imp[i]:.3f}")
 
-# ── Title & Tabs (named to avoid index errors)
+with st.sidebar:
+    st.divider()
+    st.markdown("**Status**")
+    with st.expander("Files / Status", expanded=False):
+        st.write(bootstrap_msg or "Bootstrap OK")
+        st.write(f"Model present: { (ART / 'rf_model_aug.joblib').exists() or (ART / 'xgb_model_aug.joblib').exists() }")
+        st.write(f"Features JSON: { (ART / 'feature_columns_aug.json').exists() }")
+        st.write(f"Processed CSV: { (DATA / 'features_aug.csv').exists() }")
+
+# ───────────────────────────────────────────────────────────────────────────────
+# UI: Title & Tabs (light theme – no dark mode)
+# ───────────────────────────────────────────────────────────────────────────────
 st.title("📦 DoorDash ETA Prediction Dashboard")
-TAB_NAMES = ["Single Prediction","Batch Upload","Trends","Scenario Simulator","Explainability","Monitoring"]
+TAB_NAMES = ["Single Prediction", "Batch Upload", "Trends", "Explainability", "Monitoring"]
 tabs = st.tabs(TAB_NAMES)
 tab = dict(zip(TAB_NAMES, tabs))
 
-# ── Tab: Single Prediction
+# ───────────────────────────────────────────────────────────────────────────────
+# Tab: Single Prediction
+# ───────────────────────────────────────────────────────────────────────────────
 with tab["Single Prediction"]:
     st.subheader("Single Prediction")
+
     preset = st.selectbox("Preset", ["Custom","Lunch rush","Dinner peak","Rainy weekend","Late night"])
 
     # defaults
@@ -125,7 +160,7 @@ with tab["Single Prediction"]:
         est_place = st.number_input("Est. Order Place (sec)", 0, 7200, est_place)
         est_drive = st.number_input("Est. Drive (sec)", 0, 7200, est_drive)
 
-    # derived
+    # derived features
     load_ratio = outstanding/(onshift+1e-3)
     busy_ratio = busy/(onshift+1e-3)
     demand_pressure = outstanding/(busy+1e-3)
@@ -144,7 +179,7 @@ with tab["Single Prediction"]:
         "is_holiday": int(is_holiday), "peak_hour": int(peak_hour), "is_rush": int(is_rush),
         "estimated_order_place_duration": int(est_place), "estimated_store_to_consumer_driving_duration": int(est_drive),
         "market_id": 1.0, "temperature_c": float(temperature_c), "precip": int(precip),
-        # default one-hots to match training (drop='first')
+        # defaults for one-hots used in training when drop='first'
         "weather_Cloudy": 0, "weather_Rain": 0, "weather_Snow": 0,
         "traffic_Light": 0, "traffic_Medium": 1,
         "meal_period_breakfast": 0, "meal_period_dinner": 0, "meal_period_other": 1
@@ -162,36 +197,32 @@ with tab["Single Prediction"]:
     )
 
     if st.button("Predict ETA"):
-        with st.spinner("Scoring..."):
-            mdl = xgb_model if (model_choice=="xgb" and xgb_model is not None) else rf_model
-            if mdl is None:
-                st.warning("Train a model first (Run prep_and_train_augmented or train_advanced).")
-            else:
-                eta = float(mdl.predict(X)[0])
-                msg = f"ETA: {eta/60:.1f} min ({int(eta)} sec)"
-                if q90 is not None:
-                    lo, hi = eta - q90, eta + q90
-                    msg += f"  •  ± {q90/60:.1f} min  [{lo/60:.1f} – {hi/60:.1f}]"
-                st.success(msg)
-                try:
-                    st.toast("Prediction ready ✅", icon="✅")
-                except Exception:
-                    pass
+        mdl = xgb_model if (model_choice=="xgb" and xgb_model is not None) else rf_model
+        if mdl is None:
+            st.warning("Train a model first (Run prep_and_train_augmented or train_advanced).")
+        else:
+            eta = float(mdl.predict(X)[0])
+            msg = f"ETA: {eta/60:.1f} min ({int(eta)} sec)"
+            if q90 is not None:
+                lo, hi = eta - q90, eta + q90
+                msg += f"  •  ± {q90/60:.1f} min  [{lo/60:.1f} – {hi/60:.1f}]"
+            st.success(msg)
 
-# ── Tab: Batch Upload
+# ───────────────────────────────────────────────────────────────────────────────
+# Tab: Batch Upload
+# ───────────────────────────────────────────────────────────────────────────────
 with tab["Batch Upload"]:
     st.subheader("Batch Upload")
     up = st.file_uploader("Upload CSV with feature columns", type=["csv"])
     if up and (xgb_model or rf_model):
         dfu = pd.read_csv(up)
         if feature_cols:
-            missing = [c for c in feature_cols if c not in dfu.columns]
-            for m in missing:
-                dfu[m] = 0
+            for c in feature_cols:
+                if c not in dfu.columns:
+                    dfu[c] = 0
             dfu = dfu[feature_cols]
         mdl = xgb_model or rf_model
-        with st.spinner("Scoring batch..."):
-            dfu["pred_eta_seconds"] = mdl.predict(dfu)
+        dfu["pred_eta_seconds"] = mdl.predict(dfu)
         st.download_button(
             "Download Predictions",
             dfu.to_csv(index=False).encode("utf-8"),
@@ -201,7 +232,9 @@ with tab["Batch Upload"]:
     else:
         st.caption("Train first, then upload a CSV built from data/processed/features_aug.csv columns.")
 
-# ── Tab: Trends
+# ───────────────────────────────────────────────────────────────────────────────
+# Tab: Trends
+# ───────────────────────────────────────────────────────────────────────────────
 with tab["Trends"]:
     st.subheader("Trends: Error Distribution & Hourly Means")
     try:
@@ -225,22 +258,9 @@ with tab["Trends"]:
     except Exception:
         st.info("Train first to see trends.")
 
-# ── Tab: Scenario Simulator
-with tab["Scenario Simulator"]:
-    st.subheader("Scenario Simulator")
-    st.write("Adjust inputs in *Single Prediction*, then save snapshots here.")
-    if "scenarios" not in st.session_state:
-        st.session_state.scenarios = []
-    can_save = "row" in locals()
-    name = st.text_input("Scenario name", "Base Case")
-    if st.button("Save current inputs as scenario", disabled=not can_save):
-        if can_save:
-            st.session_state.scenarios.append((name, row.copy()))
-    if st.session_state.scenarios:
-        for nm, r in st.session_state.scenarios[-5:]:
-            st.json({"name": nm, **{k: r[k] for k in list(r)[:10]}})
-
-# ── Tab: Explainability
+# ───────────────────────────────────────────────────────────────────────────────
+# Tab: Explainability
+# ───────────────────────────────────────────────────────────────────────────────
 with tab["Explainability"]:
     st.subheader("Explainability (SHAP)")
     shap_img = ART / "shap_summary.png"
@@ -249,26 +269,19 @@ with tab["Explainability"]:
     else:
         st.info("Run: `python -m utils.explain_shap` after training to generate SHAP plots.")
 
-# ── Tab: Monitoring (Evidently) — embed + download + sensitivity controls
+# ───────────────────────────────────────────────────────────────────────────────
+# Tab: Monitoring (Evidently) — embed + download
+# ───────────────────────────────────────────────────────────────────────────────
 with tab["Monitoring"]:
     import streamlit.components.v1 as components
-    from typing import Optional
 
     st.subheader("Monitoring & Drift (Evidently)")
     st.caption("Compare a reference window vs a current window in your processed dataset.")
-    st.write("Default: first 70% rows = reference; last 30% rows = current. Upload a CSV for a real ‘current’ slice.")
+    st.write("- Default: first 70% rows = reference; last 30% rows = current.")
+    st.write("- Or upload a CSV to act as the ‘current’ slice (same schema).")
 
-    # Sensitivity knobs (optional)
-    c1, c2 = st.columns(2)
-    with c1:
-        ref_frac = st.slider("Reference fraction (first part of file)", 0.50, 0.95, 0.90, 0.05)
-        stattest_threshold = st.slider("Stat test threshold (lower = more sensitive)", 0.01, 0.20, 0.05, 0.01)
-    with c2:
-        stattest = st.selectbox("Stat test (numeric)", ["wasserstein", "ks", "z"])
-
-    # Optional current-window upload
     recent_upl = st.file_uploader("Optional: upload current-window CSV", type=["csv"], key="upl_cur")
-    cur_path: Optional[Path] = None
+    cur_path = None
     if recent_upl:
         tmp = REPORTS / "uploaded_current.csv"
         tmp.parent.mkdir(parents=True, exist_ok=True)
@@ -279,12 +292,6 @@ with tab["Monitoring"]:
     ref = DATA / "features_aug.csv"
     out = REPORTS / "evidently_drift.html"
 
-    tests_cols = [
-        "delivery_seconds","hour","load_ratio",
-        "estimated_store_to_consumer_driving_duration",
-        "total_outstanding_orders","total_onshift_dashers","total_busy_dashers"
-    ]
-
     if st.button("Generate Drift Report"):
         with st.spinner("Building Evidently report..."):
             try:
@@ -293,14 +300,18 @@ with tab["Monitoring"]:
                     ref_path=ref,
                     cur_path=cur_path,
                     out_path=out,
-                    ref_frac=float(ref_frac),
-                    tests_cols=tests_cols,
-                    stattest=stattest,
-                    stattest_threshold=float(stattest_threshold),
+                    ref_frac=0.90,
+                    tests_cols=[
+                        "delivery_seconds","hour","load_ratio",
+                        "estimated_store_to_consumer_driving_duration",
+                        "total_outstanding_orders","total_onshift_dashers","total_busy_dashers"
+                    ],
+                    stattest="wasserstein",
+                    stattest_threshold=0.05,
                 )
                 size_kb = html_path.stat().st_size / 1024 if html_path.exists() else 0
                 if size_kb < 5:
-                    st.warning("Report generated but looks empty; verify your dataset has rows.")
+                    st.warning("Report generated but looks empty; check that your dataset has rows.")
                 else:
                     st.success(f"Report generated ({size_kb:.1f} KB).")
             except Exception as e:
