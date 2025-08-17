@@ -3,6 +3,7 @@ from pathlib import Path
 from io import BytesIO
 import sys
 import json
+import subprocess
 import joblib
 import numpy as np
 import pandas as pd
@@ -10,7 +11,7 @@ import plotly.express as px
 import streamlit as st
 
 # ───────────────────────────────────────────────────────────────────────────────
-# Basic setup
+# Basic setup (light theme via config.toml; no dark-mode toggles here)
 # ───────────────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -241,7 +242,7 @@ with tab["Trends"]:
         df = pd.read_csv(DATA / "features_aug.csv")
         feature_cols2 = json.loads((ART / "feature_columns_aug.json").read_text())
         model2 = xgb_model or rf_model
-        if model2:
+        if model2 and len(df) > 0:
             sample = df.sample(n=min(2000, len(df)), random_state=42)
             sample["pred"] = model2.predict(sample[feature_cols2])
             fig = px.histogram(
@@ -259,15 +260,48 @@ with tab["Trends"]:
         st.info("Train first to see trends.")
 
 # ───────────────────────────────────────────────────────────────────────────────
-# Tab: Explainability
+# Tab: Explainability (with in-app SHAP generation)
 # ───────────────────────────────────────────────────────────────────────────────
 with tab["Explainability"]:
     st.subheader("Explainability (SHAP)")
     shap_img = ART / "shap_summary.png"
+    shap_bar = ART / "shap_bar.png"
+    top_csv  = ART / "shap_top_features.csv"
+
+    c1, c2 = st.columns([1,1])
+    with c1:
+        gen = st.button("Generate / Refresh SHAP plots")
+    with c2:
+        st.caption("Uses a small sample for speed. Works for RF or XGB models.")
+
+    if gen:
+        with st.spinner("Computing SHAP…"):
+            try:
+                # Equivalent to: python -m utils.explain_shap
+                p = subprocess.run(
+                    [sys.executable, "-m", "utils.explain_shap"],
+                    cwd=str(PROJECT_ROOT),
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                st.success("SHAP plots generated.")
+                if p.stdout:
+                    st.caption(p.stdout[-500:])
+            except subprocess.CalledProcessError as e:
+                st.error(f"SHAP generation failed: {e.stderr or e.stdout or e}")
+            except Exception as e:
+                st.error(f"SHAP generation error: {e}")
+
     if shap_img.exists():
-        st.image(str(shap_img), caption="SHAP Summary Plot")
+        st.image(str(shap_img), caption="SHAP Summary (beeswarm)", use_container_width=True)
+        if shap_bar.exists():
+            st.image(str(shap_bar), caption="Top features by mean |SHAP|", use_container_width=True)
+        if top_csv.exists():
+            with open(top_csv, "rb") as f:
+                st.download_button("Download top-20 SHAP CSV", f.read(), "shap_top_features.csv", "text/csv")
     else:
-        st.info("Run: `python -m utils.explain_shap` after training to generate SHAP plots.")
+        st.info("No SHAP plots yet. Click **Generate / Refresh SHAP plots**.")
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Tab: Monitoring (Evidently) — embed + download
