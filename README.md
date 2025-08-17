@@ -171,7 +171,7 @@ matplotlib
   - **DoorDash-style** open datasets for research/education
   - **Streamlit** for the app framework
   - **SHAP** for explainability
-  - **Evidently88 for monitoring
+  - **Evidently** for monitoring
 ---
 **Run the app:**
 
