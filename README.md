@@ -149,7 +149,8 @@ base = "light"
 - **Large files warning on GitHub**
   - Don’t commit **huge datasets or models**. Keep only a small demo CSV; download large files at runtime if needed.
 
-⸻
+
+---
 
 # 📦 Requirements (minimum)
 ```bash
