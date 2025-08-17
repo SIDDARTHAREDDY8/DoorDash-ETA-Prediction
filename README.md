@@ -114,7 +114,5 @@ matplotlib
 
 ---
 
-You can **copy everything above** into your GitHub `README.md` file.  
 
-Do you also want me to shorten this into a **LinkedIn-ready project showcase post** (2–3 lines + your app link) so you can share it easily?
 
