@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Environment variables
+.env
+
+# Logs and cache
+*.log
+*.sqlite
+mlruns/
+artifacts_aug/
+
+# OS files
+.DS_Store
+
+# Streamlit and reports
+.reports/
+reports/
+
