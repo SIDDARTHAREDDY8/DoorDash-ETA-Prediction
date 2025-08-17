@@ -3,24 +3,6 @@
 This archive contains the full **code** (base + upgrades).  
 Add your dataset at `data/raw/historical_data.csv` and follow the steps.
 
-doordash-eta-project/
-│── app/
-│   └── app.py                  # Main Streamlit app
-│── utils/
-│   ├── bootstrap.py            # Auto-trains small model if missing
-│   ├── explain_shap.py         # SHAP explainability scripts
-│   └── drift_report.py         # Evidently drift reports
-│── data/
-│   ├── raw/                    # Raw dataset(s)
-│   └── processed/              # Processed features
-│── artifacts_aug/              # Trained model, features, SHAP plots
-│── reports/                    # Drift reports
-│── requirements.txt            # Dependencies
-│── .streamlit/config.toml      # Streamlit theme config
-│── .gitignore
-└── README.md
-
-
 
 ## Quickstart
 ```bash
@@ -53,7 +35,23 @@ python -m utils.explain_shap
 streamlit run app/app_pro.py --server.headless true
 ```
 
-## Extras
-- **Batch predictions:** `python -m utils.batch_predict data/processed/features_aug.csv data/processed/pred_features_aug.csv --model xgb`
-- **Scheduler (simulated real-time):** `python -m scripts.schedule_predict` then drop CSVs into `data/processed/incoming/`
-- **Weather/Traffic API hooks:** set `OPENWEATHER_API_KEY` and `TOMTOM_API_KEY`, then call functions in `src/apis.py` during your own augmentation step.
+# 🚀 DoorDash ETA Prediction
+
+[![Streamlit App](https://img.shields.io/badge/Streamlit-Live%20Demo-brightgreen)](https://doordash-eta-prediction-hox7vaedsb6tumugrgx38e.streamlit.app)
+
+An end-to-end **machine learning project** that predicts **Estimated Time of Arrival (ETA)** for DoorDash-style deliveries.  
+The project integrates **prediction, explainability (SHAP), and monitoring (Evidently)** in an interactive **Streamlit dashboard**.
+
+---
+
+## ✨ Features
+
+✅ **Single Prediction** – enter order details and get instant ETA predictions  
+✅ **Batch Prediction** – upload CSVs for bulk predictions with downloadable results  
+✅ **Explainability (SHAP)** – visualize feature importance and model decisions  
+✅ **Monitoring (Evidently)** – detect and analyze data drift using live or uploaded datasets  
+✅ **Auto-training** – if no trained model exists, a compact Random Forest is trained automatically  
+✅ **Streamlit UI** – user-friendly interface with plots, downloads, and interactive insights  
+
+---
+
