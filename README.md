@@ -3,6 +3,24 @@
 This archive contains the full **code** (base + upgrades).  
 Add your dataset at `data/raw/historical_data.csv` and follow the steps.
 
+doordash-eta-project/
+│── app/
+│   └── app.py                  # Main Streamlit app
+│── utils/
+│   ├── bootstrap.py            # Auto-trains small model if missing
+│   ├── explain_shap.py         # SHAP explainability scripts
+│   └── drift_report.py         # Evidently drift reports
+│── data/
+│   ├── raw/                    # Raw dataset(s)
+│   └── processed/              # Processed features
+│── artifacts_aug/              # Trained model, features, SHAP plots
+│── reports/                    # Drift reports
+│── requirements.txt            # Dependencies
+│── .streamlit/config.toml      # Streamlit theme config
+│── .gitignore
+└── README.md
+
+
 ## Quickstart
 ```bash
 # 1) Create & activate a virtual env
